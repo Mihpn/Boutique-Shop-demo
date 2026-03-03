@@ -114,6 +114,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+     # ── Bước 6.5: Lấy Short SHA và Timestamp để làm Tag xịn ──
+      - name: 🏷️ Generate Tag
+        id: vars
+        run: |
+          echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+
       # ── Bước 7: Build & Push image chính thức ──
       - name: 🚀 Build & Push to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -122,7 +129,7 @@ jobs:
           context: ${{ matrix.context }}
           push: true
           tags: |
-            ${{ matrix.image }}:${{ github.sha }}
+            ${{ matrix.image }}:v1.0.0-${{ env.DATE }}-${{ env.SHORT_SHA }}
             ${{ matrix.image }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
