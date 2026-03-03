@@ -7,11 +7,11 @@ name: DevSecOps CI
 
 on:
   push:
-    branches: [main]
+    branches: [ "main", "develop" ]
     paths:
       - 'src/**'
   pull_request:
-    branches: [main]
+    branches: [ "main", "develop" ]
     paths:
       - 'src/**'
   workflow_dispatch: # Cho phép chạy thủ công từ GitHub UI
@@ -157,4 +157,4 @@ jobs:
             echo "❌ Một hoặc nhiều service build thất bại!"
             exit 1
           fi
-          echo "✅ Tất cả 11 services đã qua Lint + Scan + Push!"
+          echo "✅ Tất cả services đã qua Lint + Scan + Push!"
