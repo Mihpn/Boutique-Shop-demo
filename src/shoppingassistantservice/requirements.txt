@@ -1,0 +1,9 @@
+# requirements.txt — ZERO SDK, only Flask needed
+# urllib is Python stdlib — no extra install required
+
+flask==3.1.0
+Werkzeug>=3.0.0
+click>=8.0.0
+itsdangerous>=2.0.0
+Jinja2>=3.0.0
+MarkupSafe>=2.0.0

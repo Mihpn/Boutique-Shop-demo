@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkoutservice-online-boutique
+  namespace: online-boutique
+spec:
+  selector:
+    matchLabels:
+      app: checkoutservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: checkoutservice-online-boutique
+    spec:
+      serviceAccountName: checkoutservice-online-boutique
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        - name: dockerhub-key
+      containers:
+        - name: server
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [-ALL]
+            privileged: false
+            readOnlyRootFilesystem: true
+          image: kihpn1711/checkoutservice-custom:v1 # 🚨 Bro nhớ check xem bản v1 này đã fix logic checkout chưa nhé
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 5050
+          env:
+          - name: PORT
+            value: "5050"
+          - name: PRODUCT_CATALOG_SERVICE_ADDR
+            value: "productcatalogservice-online-boutique:3550"
+          - name: SHIPPING_SERVICE_ADDR
+            value: "shippingservice-online-boutique:50051"
+          - name: PAYMENT_SERVICE_ADDR
+            value: "paymentservice-online-boutique:50051"
+          - name: EMAIL_SERVICE_ADDR
+            value: "emailservice-online-boutique:5000"
+          - name: CURRENCY_SERVICE_ADDR
+            value: "currencyservice-online-boutique:7000"
+          - name: CART_SERVICE_ADDR
+            value: "cartservice-online-boutique:7070"
+          readinessProbe:
+            initialDelaySeconds: 25 # 🚨 Cho nó 25s để ping các service khác
+            grpc:
+              port: 5050
+          livenessProbe:
+            initialDelaySeconds: 25
+            grpc:
+              port: 5050
+          resources:
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkoutservice-online-boutique
+  namespace: online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: checkoutservice-online-boutique
+  ports:
+  - name: grpc
+    port: 5050
+    targetPort: 5050
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: checkoutservice-online-boutique
+  namespace: online-boutique

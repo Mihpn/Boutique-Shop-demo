@@ -1,0 +1,124 @@
+# =============================================================================
+# NHÓM 4: Giao diện & AI - shoppingassistantservice
+# initContainers: chờ checkoutservice sẵn sàng (đảm bảo Nhóm 3 đã lên)
+# Secret gemini-api-key PHẢI được tạo trước khi helm install
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shoppingassistantservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: shoppingassistantservice-online-boutique
+    group: "4-ui-ai"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shoppingassistantservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: shoppingassistantservice-online-boutique
+    spec:
+      serviceAccountName: shoppingassistantservice-online-boutique
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+        {{- end }}
+      # -----------------------------------------------------------------------
+      # initContainers: chờ checkoutservice để xác nhận Nhóm 3 đã sẵn sàng
+      # -----------------------------------------------------------------------
+      initContainers:
+      - name: wait-for-checkout
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for checkoutservice-online-boutique:5050 (proxy for Group 3)..."
+            until nc -z checkoutservice-online-boutique 5050; do
+              echo "  Checkout not ready, retrying in 3s..."
+              sleep 3
+            done
+            echo "Checkout is UP! Starting shoppingassistantservice."
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: "{{ .Values.shoppingassistantservice.image.repository }}:{{ .Values.shoppingassistantservice.image.tag }}"
+        imagePullPolicy: {{ .Values.shoppingassistantservice.image.pullPolicy }}
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: GEMINI_MODEL
+          value: {{ .Values.shoppingassistantservice.geminiModel | quote }}
+        - name: GEMINI_TIMEOUT
+          value: {{ .Values.shoppingassistantservice.geminiTimeout | quote }}
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.shoppingassistantservice.geminiSecretName }}
+              key: {{ .Values.shoppingassistantservice.geminiSecretKey }}
+              optional: false
+        resources:
+          requests:
+            cpu: {{ .Values.shoppingassistantservice.resources.requests.cpu }}
+            memory: {{ .Values.shoppingassistantservice.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.shoppingassistantservice.resources.limits.cpu }}
+            memory: {{ .Values.shoppingassistantservice.resources.limits.memory }}
+        readinessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          httpGet:
+            path: /health
+            port: 8080
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          httpGet:
+            path: /health
+            port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shoppingassistantservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: shoppingassistantservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: shoppingassistantservice-online-boutique
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shoppingassistantservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}

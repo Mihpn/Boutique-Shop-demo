@@ -1,0 +1,203 @@
+# =============================================================================
+# values.yaml - Online Boutique Helm Chart
+# Tất cả cấu hình có thể thay đổi được đặt ở đây.
+# =============================================================================
+
+# --- Cấu hình chung ---
+namespace: online-boutique
+imagePullSecrets:
+  - name: dockerhub-key
+
+# --- Cấu hình Ingress ---
+ingress:
+  enabled: true
+  className: nginx
+  host: online-boutique.kihpn.local  # IP LoadBalancer của bạn
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+# =============================================================================
+# NHÓM 1: Tầng Dữ liệu
+# =============================================================================
+redis:
+  image:
+    repository: redis
+    tag: "alpine"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 70m
+      memory: 200Mi
+    limits:
+      cpu: 125m
+      memory: 256Mi
+
+# =============================================================================
+# NHÓM 2: Backend Độc lập
+# =============================================================================
+adservice:
+  image:
+    repository: kihpn1711/adservice
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+currencyservice:
+  image:
+    repository: kihpn1711/currencyservice
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+emailservice:
+  image:
+    repository: kihpn1711/emailservice
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+paymentservice:
+  image:
+    repository: kihpn1711/paymentservice
+    tag: "v2"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+shippingservice:
+  image:
+    repository: kihpn1711/shippingservice
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+productcatalogservice:
+  image:
+    repository: kihpn1711/productcatalogservice
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# =============================================================================
+# NHÓM 3: Backend Phụ thuộc (có initContainers)
+# =============================================================================
+cartservice:
+  image:
+    repository: kihpn1711/cartservice
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 200m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 128Mi
+  # initContainers sẽ chờ redis-cart sẵn sàng
+  waitForRedis: true
+
+recommendationservice:
+  image:
+    repository: kihpn1711/recommendationservice
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 220Mi
+    limits:
+      cpu: 200m
+      memory: 450Mi
+  # initContainers sẽ chờ productcatalogservice sẵn sàng
+  waitForProductCatalog: true
+
+checkoutservice:
+  image:
+    repository: kihpn1711/checkoutservice-custom
+    tag: "v1"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  # initContainers sẽ chờ tất cả backend services sẵn sàng
+  waitForBackends: true
+
+# =============================================================================
+# NHÓM 4: Giao diện & AI (có initContainers)
+# =============================================================================
+shoppingassistantservice:
+  image:
+    repository: kihpn1711/shoppingassistantservice
+    tag: "v3"
+    pullPolicy: Always
+  # Tên model Gemini AI
+  geminiModel: "gemini-2.5-flash"
+  geminiTimeout: "30"
+  # Secret chứa GEMINI_API_KEY - phải tạo trước khi helm install
+  geminiSecretName: "gemini-api-key"
+  geminiSecretKey: "GEMINI_API_KEY"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+frontend:
+  image:
+    repository: kihpn1711/frontend-custom
+    tag: "v2"
+    pullPolicy: Always
+  enableShoppingAssistant: "true"
+  enableAssistant: "true"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  # initContainers sẽ chờ checkoutservice và shoppingassistantservice
+  waitForFrontendDeps: true

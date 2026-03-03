@@ -1,0 +1,106 @@
+kubectl create secret docker-registry dockerhub-key \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=TÊN_DOCKER_HUB_CỦA_BRO \
+  --docker-password=PASSWORD_HOẶC_ACCESS_TOKEN \
+  --docker-email=EMAIL_CỦA_BRO \
+  -n online-boutique
+
+=> chạy ở k8s master 1
+Nhóm 0: Nền móng (Anh em mình đã xong)
+namespace.yaml (Tạo nhà online-boutique).
+
+Secret dockerhub-key (Bro đã chạy lệnh tạo thành công).
+
+(Nếu bro đã sửa xong 3 lỗi cổng Port và Host Ingress tôi báo lúc nãy, mình bắt đầu vào việc luôn).
+
+📦 Nhóm 1: Tầng Dữ liệu (Chạy ĐẦU TIÊN)
+Hệ thống cần có chỗ lưu trữ trước khi các dịch vụ khác khởi động.
+
+Apply file: Khối YAML của redis-cart.
+
+Lý do: Con cartservice sẽ chết ngay lập tức nếu không tìm thấy redis để kết nối.
+
+Cách check: Đợi Pod Redis chuyển sang Running thì mới đi tiếp.
+
+⚙️ Nhóm 2: Các Backend Độc lập (Chạy THỨ HAI)
+Đây là các dịch vụ tự thân vận động, không cần gọi sang dịch vụ nào khác. Bro có thể apply chúng cùng lúc hoặc lần lượt.
+
+Apply các file:
+
+productcatalogservice.yaml (Rất quan trọng, chứa danh sách sản phẩm).
+
+currencyservice.yaml (Quy đổi tiền tệ).
+
+emailservice.yaml
+
+paymentservice.yaml
+
+shippingservice.yaml
+
+adservice.yaml
+
+Cách check: Kiểm tra log thấy báo Listening on port... là ngon.
+
+🔗 Nhóm 3: Các Backend Phụ thuộc (Chạy THỨ BA)
+Những con này cần các dịch vụ ở Nhóm 1 và Nhóm 2 phải "sống" thì nó mới chạy được.
+
+Apply các file:
+
+cartservice.yaml (Nó sẽ tự động tìm con Redis vừa tạo ở Nhóm 1).
+
+recommendationservice.yaml (Nó cần gọi sang productcatalogservice).
+
+checkoutservice.yaml (Con này phức tạp nhất, nó gọi đến Cart, Product, Currency, Email, Shipping, Payment. Chỉ apply con này khi tất cả các con trên đã xanh).
+
+🖥️ Nhóm 4: Tầng Giao diện & Tương tác (Chạy THỨ TƯ)
+Khi "hậu phương" đã vững chắc, mình đưa "tiền tuyến" lên.
+
+Apply các file:
+
+shoppingassistantservice.yaml (Con trợ lý AI).
+
+frontend.yaml * Lý do: Con frontend khi khởi động sẽ rà soát (ping) tất cả các dịch vụ backend thông qua biến môi trường. Nếu bro đưa frontend lên trước khi backend sẵn sàng, nó sẽ báo lỗi CrashLoopBackOff liên tục.
+
+🌍 Nhóm 5: Mở cửa đón khách (Chạy CUỐI CÙNG)
+Apply file: ingress-online-boutique.yaml
+
+Lý do: Sau khi check toàn bộ 12 con Pod trên đều báo trạng thái 1/1 Running, bro mới thiết lập Ingress để nối tên miền (như online-boutique.hannover.local) trỏ vào trong cụm K8s.
+Ingress Controller của bro đang "hứng" traffic ở cổng 30080 trên các Node vật lý (111, 112, 113), chứ không phải cổng 80. Cổng 80 mà bro thấy trong lệnh đó chỉ là cổng nội bộ (ClusterIP) của nó thôi.
+
+🛠️ Sửa lại file online-boutique.conf cho chuẩn:
+Bro mở lại file và sửa cái Port trong phần upstream thành 30080 nhé:
+
+Nginx
+# 1. Định nghĩa cụm K8s của bro
+upstream boutique_cluster {
+    server 192.168.157.111:30080; # 🚨 ĐỔI 80 THÀNH 30080
+    server 192.168.157.112:30080; # 🚨 ĐỔI 80 THÀNH 30080
+    server 192.168.157.113:30080; # 🚨 ĐỔI 80 THÀNH 30080
+}
+
+server {
+    listen 80;
+
+    # 2. Tên miền để trình duyệt nhận diện
+    server_name online-boutique.kihpn.local;
+
+    location / {
+        proxy_pass http://boutique_cluster;
+        proxy_redirect off;
+
+        # 3. Đóng gói đầy đủ Header gửi cho Ingress
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+🚀 Tại sao phải dùng 30080?
+NodePort: K8s đang mở một "lỗ hổng" ở cổng 30080 trên toàn bộ các máy chủ vật lý của bro để đón khách từ bên ngoài vào.
+
+Bản chất: Khi con Nginx .115 gửi yêu cầu đến 192.168.157.111:30080, máy chủ .111 sẽ hiểu ngay là: "À, yêu cầu này dành cho Ingress Controller, để tôi đẩy nó vào trong cụm".
+
+chạy trên k8s thì dùng lệnh
+kubectl create secret generic gemini-api-key \
+  --from-literal=GEMINI_API_KEY="AI-APIkey-google" \
+  -n online-boutique

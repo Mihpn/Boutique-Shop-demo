@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend-online-boutique
+  namespace: online-boutique
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-online-boutique
+  namespace: online-boutique
+  labels:
+    app: frontend-online-boutique
+spec:
+  selector:
+    matchLabels:
+      app: frontend-online-boutique
+  template:
+    metadata:
+      labels:
+        app: frontend-online-boutique
+    spec:
+      serviceAccountName: frontend-online-boutique
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        - name: dockerhub-key
+      containers:
+        - name: server
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [-ALL]
+            privileged: false
+            readOnlyRootFilesystem: true
+          image: kihpn1711/frontend-custom:v2 # 🚨 Đúng bản v2 bro vừa build
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 8080
+          readinessProbe:
+            initialDelaySeconds: 15 # 🚨 Tăng nhẹ thời gian chờ cho chắc
+            httpGet:
+              path: "/_healthz"
+              port: 8080
+              httpHeaders:
+              - name: "Cookie"
+                value: "shop_session-id=x-readiness-probe"
+          livenessProbe:
+            initialDelaySeconds: 15
+            httpGet:
+              path: "/_healthz"
+              port: 8080
+              httpHeaders:
+              - name: "Cookie"
+                value: "shop_session-id=x-liveness-probe"
+          env:
+          - name: PORT
+            value: "8080"
+          - name: PRODUCT_CATALOG_SERVICE_ADDR
+            value: "productcatalogservice-online-boutique:3550"
+          - name: CURRENCY_SERVICE_ADDR
+            value: "currencyservice-online-boutique:7000"
+          - name: CART_SERVICE_ADDR
+            value: "cartservice-online-boutique:7070"
+          - name: RECOMMENDATION_SERVICE_ADDR
+            value: "recommendationservice-online-boutique:8080"
+          - name: SHIPPING_SERVICE_ADDR
+            value: "shippingservice-online-boutique:50051"
+          - name: CHECKOUT_SERVICE_ADDR
+            value: "checkoutservice-online-boutique:5050"
+          - name: AD_SERVICE_ADDR
+            value: "adservice-online-boutique:9555"
+          - name: SHOPPING_ASSISTANT_SERVICE_ADDR
+            value: "shoppingassistantservice-online-boutique:80" # Tên service và port phải khớp
+          - name: ENABLE_SHOPPING_ASSISTANT
+            value: "true"
+          - name: ENABLE_ASSISTANT
+            value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-online-boutique
+  namespace: online-boutique
+  labels:
+    app: frontend-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend-online-boutique
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

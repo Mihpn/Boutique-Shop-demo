@@ -1,0 +1,135 @@
+# =============================================================================
+# NHÓM 4: Giao diện - frontend
+# initContainers: chờ checkoutservice VÀ shoppingassistantservice sẵn sàng
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: frontend-online-boutique
+    group: "4-ui-ai"
+spec:
+  selector:
+    matchLabels:
+      app: frontend-online-boutique
+  template:
+    metadata:
+      labels:
+        app: frontend-online-boutique
+    spec:
+      serviceAccountName: frontend-online-boutique
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+        {{- end }}
+      # -----------------------------------------------------------------------
+      # initContainers: chờ checkout (Nhóm 3) và shoppingassistant (Nhóm 4)
+      # -----------------------------------------------------------------------
+      initContainers:
+      - name: wait-for-checkout
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting checkoutservice:5050...'; until nc -z checkoutservice-online-boutique 5050; do sleep 3; done; echo 'OK'"]
+      - name: wait-for-shoppingassistant
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting shoppingassistantservice:80...'; until nc -z shoppingassistantservice-online-boutique 80; do sleep 3; done; echo 'OK'"]
+      containers:
+        - name: server
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: true
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+          - containerPort: 8080
+          readinessProbe:
+            initialDelaySeconds: 15
+            httpGet:
+              path: "/_healthz"
+              port: 8080
+              httpHeaders:
+              - name: "Cookie"
+                value: "shop_session-id=x-readiness-probe"
+          livenessProbe:
+            initialDelaySeconds: 15
+            httpGet:
+              path: "/_healthz"
+              port: 8080
+              httpHeaders:
+              - name: "Cookie"
+                value: "shop_session-id=x-liveness-probe"
+          env:
+          - name: PORT
+            value: "8080"
+          - name: PRODUCT_CATALOG_SERVICE_ADDR
+            value: "productcatalogservice-online-boutique:3550"
+          - name: CURRENCY_SERVICE_ADDR
+            value: "currencyservice-online-boutique:7000"
+          - name: CART_SERVICE_ADDR
+            value: "cartservice-online-boutique:7070"
+          - name: RECOMMENDATION_SERVICE_ADDR
+            value: "recommendationservice-online-boutique:8080"
+          - name: SHIPPING_SERVICE_ADDR
+            value: "shippingservice-online-boutique:50051"
+          - name: CHECKOUT_SERVICE_ADDR
+            value: "checkoutservice-online-boutique:5050"
+          - name: AD_SERVICE_ADDR
+            value: "adservice-online-boutique:9555"
+          - name: SHOPPING_ASSISTANT_SERVICE_ADDR
+            value: "shoppingassistantservice-online-boutique:80"
+          - name: ENABLE_SHOPPING_ASSISTANT
+            value: {{ .Values.frontend.enableShoppingAssistant | quote }}
+          - name: ENABLE_ASSISTANT
+            value: {{ .Values.frontend.enableAssistant | quote }}
+          resources:
+            requests:
+              cpu: {{ .Values.frontend.resources.requests.cpu }}
+              memory: {{ .Values.frontend.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.frontend.resources.limits.cpu }}
+              memory: {{ .Values.frontend.resources.limits.memory }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: frontend-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend-online-boutique
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

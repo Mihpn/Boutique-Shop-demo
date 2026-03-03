@@ -1,0 +1,87 @@
+# =============================================================================
+# NHÓM 2: Backend Độc lập - adservice
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: adservice-online-boutique
+    group: "2-backend-independent"
+spec:
+  selector:
+    matchLabels:
+      app: adservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: adservice-online-boutique
+    spec:
+      serviceAccountName: adservice-online-boutique
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+        {{- end }}
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: "{{ .Values.adservice.image.repository }}:{{ .Values.adservice.image.tag }}"
+        imagePullPolicy: {{ .Values.adservice.image.pullPolicy }}
+        ports:
+        - containerPort: 9555
+        env:
+        - name: PORT
+          value: "9555"
+        resources:
+          requests:
+            cpu: {{ .Values.adservice.resources.requests.cpu }}
+            memory: {{ .Values.adservice.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.adservice.resources.limits.cpu }}
+            memory: {{ .Values.adservice.resources.limits.memory }}
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 5
+          grpc:
+            port: 9555
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 5
+          grpc:
+            port: 9555
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: adservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: adservice-online-boutique
+  ports:
+  - name: grpc
+    port: 9555
+    targetPort: 9555
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: adservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}

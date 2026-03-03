@@ -1,0 +1,114 @@
+# =============================================================================
+# NHÓM 3: Backend Phụ thuộc - cartservice
+# initContainers: chờ redis-cart-online-boutique:6379 sẵn sàng
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cartservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: cartservice-online-boutique
+    group: "3-backend-dependent"
+spec:
+  selector:
+    matchLabels:
+      app: cartservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: cartservice-online-boutique
+    spec:
+      serviceAccountName: cartservice-online-boutique
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+        {{- end }}
+      # -----------------------------------------------------------------------
+      # initContainers: chờ Redis sẵn sàng trước khi khởi động cartservice
+      # -----------------------------------------------------------------------
+      initContainers:
+      - name: wait-for-redis
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for redis-cart-online-boutique:6379..."
+            until nc -z redis-cart-online-boutique 6379; do
+              echo "  Redis not ready, retrying in 3s..."
+              sleep 3
+            done
+            echo "Redis is UP! Starting cartservice."
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: "{{ .Values.cartservice.image.repository }}:{{ .Values.cartservice.image.tag }}"
+        imagePullPolicy: {{ .Values.cartservice.image.pullPolicy }}
+        ports:
+        - containerPort: 7070
+        env:
+        - name: REDIS_ADDR
+          value: "redis-cart-online-boutique:6379"
+        resources:
+          requests:
+            cpu: {{ .Values.cartservice.resources.requests.cpu }}
+            memory: {{ .Values.cartservice.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.cartservice.resources.limits.cpu }}
+            memory: {{ .Values.cartservice.resources.limits.memory }}
+        readinessProbe:
+          initialDelaySeconds: 15     # Đợi 15s mới bắt đầu kiểm tra lần đầu
+          periodSeconds: 10         # Cách 10s kiểm tra 1 lần
+          timeoutSeconds: 5         # CHO PHÉP APP PHẢN HỒI TRONG 5S (Rất quan trọng)
+          failureThreshold: 3
+          grpc:
+            port: 7070
+        livenessProbe:
+          initialDelaySeconds: 15     # Đợi 15s mới bắt đầu kiểm tra lần đầu
+          periodSeconds: 10
+          timeoutSeconds: 5         # CHO PHÉP APP PHẢN HỒI TRONG 5S (Rất quan trọng)
+          failureThreshold: 3
+          grpc:
+            port: 7070
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cartservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: cartservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: cartservice-online-boutique
+  ports:
+  - name: grpc
+    port: 7070
+    targetPort: 7070
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cartservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}

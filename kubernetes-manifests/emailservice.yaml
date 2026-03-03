@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emailservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: emailservice-online-boutique
+spec:
+  selector:
+    matchLabels:
+      app: emailservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: emailservice-online-boutique
+    spec:
+      serviceAccountName: emailservice-online-boutique
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        - name: dockerhub-key
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: kihpn1711/emailservice:v1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: DISABLE_PROFILER
+          value: "1"
+        readinessProbe:
+          initialDelaySeconds: 30 # 🚨 Tăng lên 30s cho chắc ăn vì mạng Hannover có vẻ hơi chậm
+          periodSeconds: 10
+          timeoutSeconds: 5      # 🚨 Cho nó 5s để trả lời, thay vì 1s mặc định
+          grpc:
+            port: 8080
+        livenessProbe:
+          initialDelaySeconds: 30 # 🚨 Đợi 30s rồi mới bắt đầu kiểm tra "sự sống"
+          periodSeconds: 10
+          timeoutSeconds: 5      # 🚨 Tăng timeout để tránh lỗi mạng ảo
+          grpc:
+            port: 8080
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emailservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: emailservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: emailservice-online-boutique
+  ports:
+  - name: grpc
+    port: 5000
+    targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: emailservice-online-boutique
+  namespace: online-boutique

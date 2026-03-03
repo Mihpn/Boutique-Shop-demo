@@ -1,0 +1,115 @@
+# =============================================================================
+# NHÓM 3: Backend Phụ thuộc - recommendationservice
+# initContainers: chờ productcatalogservice-online-boutique:3550 sẵn sàng
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendationservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: recommendationservice-online-boutique
+    group: "3-backend-dependent"
+spec:
+  selector:
+    matchLabels:
+      app: recommendationservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: recommendationservice-online-boutique
+    spec:
+      serviceAccountName: recommendationservice-online-boutique
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+        {{- end }}
+      # -----------------------------------------------------------------------
+      # initContainers: chờ productcatalogservice sẵn sàng
+      # -----------------------------------------------------------------------
+      initContainers:
+      - name: wait-for-productcatalog
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for productcatalogservice-online-boutique:3550..."
+            until nc -z productcatalogservice-online-boutique 3550; do
+              echo "  ProductCatalog not ready, retrying in 3s..."
+              sleep 3
+            done
+            echo "ProductCatalog is UP! Starting recommendationservice."
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: "{{ .Values.recommendationservice.image.repository }}:{{ .Values.recommendationservice.image.tag }}"
+        imagePullPolicy: {{ .Values.recommendationservice.image.pullPolicy }}
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: PRODUCT_CATALOG_SERVICE_ADDR
+          value: "productcatalogservice-online-boutique:3550"
+        - name: DISABLE_PROFILER
+          value: "1"
+        resources:
+          requests:
+            cpu: {{ .Values.recommendationservice.resources.requests.cpu }}
+            memory: {{ .Values.recommendationservice.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.recommendationservice.resources.limits.cpu }}
+            memory: {{ .Values.recommendationservice.resources.limits.memory }}
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 5
+          grpc:
+            port: 8080
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 5
+          grpc:
+            port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendationservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: recommendationservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: recommendationservice-online-boutique
+  ports:
+  - name: grpc
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: recommendationservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}

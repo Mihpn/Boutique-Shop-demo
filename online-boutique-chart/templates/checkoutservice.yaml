@@ -1,0 +1,160 @@
+# =============================================================================
+# NHÓM 3: Backend Phụ thuộc - checkoutservice
+# initContainers: chờ TẤT CẢ backend services (6 services) sẵn sàng
+# Thứ tự: productcatalog → shipping → payment → email → currency → cart
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkoutservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: checkoutservice-online-boutique
+    group: "3-backend-dependent"
+spec:
+  selector:
+    matchLabels:
+      app: checkoutservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: checkoutservice-online-boutique
+    spec:
+      serviceAccountName: checkoutservice-online-boutique
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+        {{- end }}
+      # -----------------------------------------------------------------------
+      # initContainers: chờ TẤT CẢ 6 backend services sẵn sàng
+      # -----------------------------------------------------------------------
+      initContainers:
+      - name: wait-for-productcatalog
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting productcatalog:3550...'; until nc -z productcatalogservice-online-boutique 3550; do sleep 3; done; echo 'OK'"]
+      - name: wait-for-shipping
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting shippingservice:50051...'; until nc -z shippingservice-online-boutique 50051; do sleep 3; done; echo 'OK'"]
+      - name: wait-for-payment
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting paymentservice:50051...'; until nc -z paymentservice-online-boutique 50051; do sleep 3; done; echo 'OK'"]
+      - name: wait-for-email
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting emailservice:5000...'; until nc -z emailservice-online-boutique 5000; do sleep 3; done; echo 'OK'"]
+      - name: wait-for-currency
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting currencyservice:7000...'; until nc -z currencyservice-online-boutique 7000; do sleep 3; done; echo 'OK'"]
+      - name: wait-for-cart
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          privileged: false
+          readOnlyRootFilesystem: true
+        command: ["sh", "-c", "echo 'Waiting cartservice:7070...'; until nc -z cartservice-online-boutique 7070; do sleep 3; done; echo 'OK'"]
+      containers:
+        - name: server
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: true
+          image: "{{ .Values.checkoutservice.image.repository }}:{{ .Values.checkoutservice.image.tag }}"
+          imagePullPolicy: {{ .Values.checkoutservice.image.pullPolicy }}
+          ports:
+          - containerPort: 5050
+          env:
+          - name: PORT
+            value: "5050"
+          - name: PRODUCT_CATALOG_SERVICE_ADDR
+            value: "productcatalogservice-online-boutique:3550"
+          - name: SHIPPING_SERVICE_ADDR
+            value: "shippingservice-online-boutique:50051"
+          - name: PAYMENT_SERVICE_ADDR
+            value: "paymentservice-online-boutique:50051"
+          - name: EMAIL_SERVICE_ADDR
+            value: "emailservice-online-boutique:5000"
+          - name: CURRENCY_SERVICE_ADDR
+            value: "currencyservice-online-boutique:7000"
+          - name: CART_SERVICE_ADDR
+            value: "cartservice-online-boutique:7070"
+          readinessProbe:
+            initialDelaySeconds: 25
+            grpc:
+              port: 5050
+          livenessProbe:
+            initialDelaySeconds: 25
+            grpc:
+              port: 5050
+          resources:
+            requests:
+              cpu: {{ .Values.checkoutservice.resources.requests.cpu }}
+              memory: {{ .Values.checkoutservice.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.checkoutservice.resources.limits.cpu }}
+              memory: {{ .Values.checkoutservice.resources.limits.memory }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkoutservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: checkoutservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: checkoutservice-online-boutique
+  ports:
+  - name: grpc
+    port: 5050
+    targetPort: 5050
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: checkoutservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}

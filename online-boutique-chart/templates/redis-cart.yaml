@@ -1,0 +1,76 @@
+# =============================================================================
+# NHÓM 1: Tầng Dữ liệu - redis-cart
+# Không có initContainers - khởi động đầu tiên.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cart-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: redis-cart-online-boutique
+    group: "1-data"
+spec:
+  selector:
+    matchLabels:
+      app: redis-cart-online-boutique
+  template:
+    metadata:
+      labels:
+        app: redis-cart-online-boutique
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+      - name: redis
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+        imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+        ports:
+        - containerPort: 6379
+        readinessProbe:
+          periodSeconds: 5
+          tcpSocket:
+            port: 6379
+        livenessProbe:
+          periodSeconds: 5
+          tcpSocket:
+            port: 6379
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+        resources:
+          requests:
+            cpu: {{ .Values.redis.resources.requests.cpu }}
+            memory: {{ .Values.redis.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.redis.resources.limits.cpu }}
+            memory: {{ .Values.redis.resources.limits.memory }}
+      volumes:
+      - name: redis-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cart-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: redis-cart-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-cart-online-boutique
+  ports:
+  - name: tcp-redis
+    port: 6379
+    targetPort: 6379

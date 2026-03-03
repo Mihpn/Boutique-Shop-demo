@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shoppingassistantservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: shoppingassistantservice-online-boutique
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shoppingassistantservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: shoppingassistantservice-online-boutique
+    spec:
+      serviceAccountName: shoppingassistantservice-online-boutique
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        - name: dockerhub-key
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: kihpn1711/shoppingassistantservice:v3
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: GEMINI_MODEL
+          value: "gemini-2.5-flash"
+        - name: GEMINI_TIMEOUT
+          value: "30"
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gemini-api-key
+              key: GEMINI_API_KEY
+              optional: false
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        readinessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          httpGet:
+            path: /health
+            port: 8080
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          httpGet:
+            path: /health
+            port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shoppingassistantservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: shoppingassistantservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: shoppingassistantservice-online-boutique
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shoppingassistantservice-online-boutique
+  namespace: online-boutique

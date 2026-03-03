@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shippingservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: shippingservice-online-boutique
+spec:
+  selector:
+    matchLabels:
+      app: shippingservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: shippingservice-online-boutique
+    spec:
+      serviceAccountName: shippingservice-online-boutique
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        - name: dockerhub-key
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [-ALL]
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: kihpn1711/shippingservice:v1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 50051
+        env:
+        - name: PORT
+          value: "50051"
+        - name: DISABLE_PROFILER
+          value: "1"
+        readinessProbe:
+          initialDelaySeconds: 20 # 🚨 Thêm dòng này để K8s chờ app khởi động
+          periodSeconds: 10
+          timeoutSeconds: 5
+          grpc:
+            port: 50051
+        livenessProbe:
+          initialDelaySeconds: 20 # 🚨 Thêm dòng này cho chắc
+          periodSeconds: 10
+          timeoutSeconds: 5
+          grpc:
+            port: 50051
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shippingservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: shippingservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: shippingservice-online-boutique
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shippingservice-online-boutique
+  namespace: online-boutique

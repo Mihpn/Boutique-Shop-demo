@@ -1,0 +1,85 @@
+# =============================================================================
+# NHÓM 2: Backend Độc lập - currencyservice
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: currencyservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: currencyservice-online-boutique
+    group: "2-backend-independent"
+spec:
+  selector:
+    matchLabels:
+      app: currencyservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: currencyservice-online-boutique
+    spec:
+      serviceAccountName: currencyservice-online-boutique
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+        {{- end }}
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: "{{ .Values.currencyservice.image.repository }}:{{ .Values.currencyservice.image.tag }}"
+        imagePullPolicy: {{ .Values.currencyservice.image.pullPolicy }}
+        ports:
+        - name: grpc
+          containerPort: 7000
+        env:
+        - name: PORT
+          value: "7000"
+        - name: DISABLE_PROFILER
+          value: "1"
+        readinessProbe:
+          grpc:
+            port: 7000
+        livenessProbe:
+          grpc:
+            port: 7000
+        resources:
+          requests:
+            cpu: {{ .Values.currencyservice.resources.requests.cpu }}
+            memory: {{ .Values.currencyservice.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.currencyservice.resources.limits.cpu }}
+            memory: {{ .Values.currencyservice.resources.limits.memory }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: currencyservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}
+  labels:
+    app: currencyservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: currencyservice-online-boutique
+  ports:
+  - name: grpc
+    port: 7000
+    targetPort: 7000
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: currencyservice-online-boutique
+  namespace: {{ include "online-boutique.namespace" . }}

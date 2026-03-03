@@ -1,0 +1,55 @@
+# =============================================================================
+# ArgoCD Application — Online Boutique (GitOps Pull-based CD)
+#
+# ArgoCD sẽ tự động watch repo GitHub và sync Helm Chart xuống cụm K8s local.
+# Cơ chế: ArgoCD POLL (kéo) repo GitHub mỗi 3 phút → phát hiện thay đổi →
+# tự động apply. Vì ArgoCD chủ động đi ra ngoài (outbound connection),
+# nên hoạt động bình thường sau NAT mà không cần mở port hay VPN.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: online-boutique
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: online-boutique
+    app.kubernetes.io/managed-by: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io  # Xóa resources khi xóa Application
+spec:
+  project: default
+
+  # ── Source: trỏ đến Helm Chart trên GitHub ──
+  source:
+    repoURL: https://github.com/Mihpn/demo-boutique.git
+    targetRevision: HEAD
+    path: online-boutique-chart  # Thư mục chứa Helm Chart
+
+    # Helm parameters — override values.yaml nếu cần
+    helm:
+      releaseName: online-boutique
+      # parameters:
+      #   - name: frontend.image.tag
+      #     value: "abc123"
+
+  # ── Destination: cụm K8s local ──
+  destination:
+    server: https://kubernetes.default.svc  # In-cluster (ArgoCD chạy trong cụm)
+    namespace: online-boutique
+
+  # ── Sync Policy: Tự động đồng bộ ──
+  syncPolicy:
+    automated:
+      prune: true      # Xóa resources không còn trong Git
+      selfHeal: true   # Tự sửa nếu ai đó sửa tay trên cluster
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: adservice-online-boutique
+spec:
+  selector:
+    matchLabels:
+      app: adservice-online-boutique
+  template:
+    metadata:
+      labels:
+        app: adservice-online-boutique
+    spec:
+      serviceAccountName: adservice-online-boutique
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+        - name: dockerhub-key
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [-ALL]
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: kihpn1711/adservice:v1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9555
+        env:
+        - name: PORT
+          value: "9555"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 5 # 🚨 Thêm dòng này để ổn định hơn
+          grpc:
+            port: 9555
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 5 # 🚨 Thêm dòng này
+          grpc:
+            port: 9555
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adservice-online-boutique
+  namespace: online-boutique
+  labels:
+    app: adservice-online-boutique
+spec:
+  type: ClusterIP
+  selector:
+    app: adservice-online-boutique
+  ports:
+  - name: grpc
+    port: 9555
+    targetPort: 9555
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: adservice-online-boutique
+  namespace: online-boutique

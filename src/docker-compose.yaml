@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: kihpn1711/frontend-custom:v2
+    container_name: frontend
+    ports: ["80:8080"]
+    environment:
+      - PORT=8080
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - CART_SERVICE_ADDR=cartservice:7070
+      - RECOMMENDATION_SERVICE_ADDR=recommendationservice:8080
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - CHECKOUT_SERVICE_ADDR=checkoutservice:5050
+      - AD_SERVICE_ADDR=adservice:9555
+      - SHOPPING_ASSISTANT_SERVICE_ADDR=shoppingassistantservice:8080
+      - ENABLE_SHOPPING_ASSISTANT="true"
+      - ENABLE_ASSISTANT=true
+  checkoutservice:
+    image: kihpn1711/checkoutservice-custom:v1
+    container_name: checkoutservice
+    environment:
+      - PORT=5050
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - PAYMENT_SERVICE_ADDR=paymentservice:50051
+      - CART_SERVICE_ADDR=cartservice:7070
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - EMAIL_SERVICE_ADDR=emailservice:8080
+
+  redis-cart:
+    image: redis:alpine
+    container_name: redis-cart
+
+  cartservice:
+    image: kihpn1711/cartservice:v1
+    container_name: cartservice
+    environment: ["REDIS_ADDR=redis-cart:6379"]
+
+  productcatalogservice:
+    image: kihpn1711/productcatalogservice:v1
+    container_name: productcatalogservice
+
+  currencyservice:
+    image: kihpn1711/currencyservice:v2
+    container_name: currencyservice
+    environment: ["PORT=7000"]
+
+  paymentservice:
+    image: kihpn1711/paymentservice:v2
+    container_name: paymentservice
+    environment: ["PORT=50051"]
+
+  shippingservice:
+    image: kihpn1711/shippingservice:v1
+    container_name: shippingservice
+
+  adservice:
+    image: kihpn1711/adservice:v1
+    container_name: adservice
+
+  recommendationservice:
+    image: kihpn1711/recommendationservice:v1
+    container_name: recommendationservice
+    environment: ["PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550"]
+
+  emailservice:
+    image: kihpn1711/emailservice:v1
+    container_name: emailservice
+
+  shoppingassistantservice:
+    build: ./shoppingassistantservice # Tự động build từ code Python mới
+    image: kihpn1711/shoppingassistantservice:v2
+    container_name: shoppingassistantservice
+    ports:
+      - "8081:8080" 
+    environment:
+      - PORT=8080
+      - GEMINI_API_KEY=${GEMINI_API_KEY} 
+      - GEMINI_MODEL=gemini-2.5-flash
+  default:
+    name: boutique-network

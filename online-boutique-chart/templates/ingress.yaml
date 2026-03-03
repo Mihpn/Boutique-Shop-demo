@@ -1,0 +1,28 @@
+# =============================================================================
+# NHÓM 5: Đón khách - Ingress
+# Trỏ toàn bộ traffic từ LoadBalancer IP về frontend-online-boutique
+# =============================================================================
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: online-boutique-ingress
+  namespace: {{ include "online-boutique.namespace" . }}
+  annotations:
+    {{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+  - host: {{ .Values.ingress.host | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-online-boutique
+            port:
+              number: 80
+{{- end }}
