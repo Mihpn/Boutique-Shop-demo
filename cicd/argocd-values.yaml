@@ -1,0 +1,57 @@
+
+
+global:
+  domain: argocd.kihpn.local
+
+configs:
+  cm:
+    admin.enabled: "true"
+  params:
+    
+    server.insecure: true
+
+
+dex:
+  enabled: false
+
+
+  enabled: false
+
+server:
+  service:
+    type: ClusterIP
+
+  resources:
+    limits:
+      memory: 1024Mi
+      cpu: 500m
+    requests:
+      memory: 512Mi
+      cpu: 250m
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    hosts:
+      - argocd.kihpn.local
+
+
+controller:
+  resources:
+    limits:
+      memory: 1024Mi
+      cpu: 500m
+    requests:
+      memory: 512Mi
+      cpu: 250m
+      
+repoServer:
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: 250m
+    requests:
+      memory: 256Mi
+      cpu: 100m

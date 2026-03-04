@@ -1,11 +1,4 @@
-# =============================================================================
-# ArgoCD Application — Online Boutique (GitOps Pull-based CD)
-#
-# ArgoCD sẽ tự động watch repo GitHub và sync Helm Chart xuống cụm K8s local.
-# Cơ chế: ArgoCD POLL (kéo) repo GitHub mỗi 3 phút → phát hiện thay đổi →
-# tự động apply. Vì ArgoCD chủ động đi ra ngoài (outbound connection),
-# nên hoạt động bình thường sau NAT mà không cần mở port hay VPN.
-# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
