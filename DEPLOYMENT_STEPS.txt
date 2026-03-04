@@ -1,0 +1,254 @@
+===============================================================================
+  DEPLOYMENT STEPS — Online Boutique Microservices (DevSecOps)
+  Project : https://github.com/Mihpn/demo-boutique
+  Author  : kihpn1711
+  Updated : 2026-03-04
+  
+  Purpose : Raw command-line reference for reproducing the entire deployment
+            from scratch. Keep this file for backup and quick reference.
+===============================================================================
+
+
+===============================================================================
+  PHASE 0: GIT REPOSITORY INITIALIZATION
+===============================================================================
+
+# Initialize Git repository
+git init
+git remote add origin https://github.com/Mihpn/demo-boutique.git
+git branch -M main
+
+# Configure GitHub Secrets (via GitHub Web UI):
+#   → Settings → Secrets and variables → Actions → New repository secret
+#   DOCKERHUB_USERNAME = kihpn1711
+#   DOCKERHUB_TOKEN    = dckr_pat_xxxxxxxxx
+
+# Initial push — triggers CI pipeline
+git add .
+git commit -m "feat: initial DevSecOps pipeline"
+git push -u origin main
+
+# Verify: GitHub Repo → tab Actions → DevSecOps CI workflow running
+
+
+===============================================================================
+  PHASE 1: CI PIPELINE VERIFICATION (GitHub Actions — Automatic)
+===============================================================================
+
+# CI is triggered automatically on push to main/develop (paths: src/**)
+# Pipeline runs 11 parallel jobs:
+#   → Hadolint (Dockerfile lint)
+#   → Docker Build (local image)
+#   → Trivy Security Scan (CRITICAL + HIGH)
+#   → Push to Docker Hub (tag: v1.0.0-YYYYMMDD-<short-sha> + latest)
+
+# Verify images on Docker Hub:
+#   https://hub.docker.com/u/kihpn1711
+#   Images: adservice, cartservice, checkoutservice, currencyservice,
+#           emailservice, frontend-custom, paymentservice,
+#           productcatalogservice, recommendationservice,
+#           shippingservice, shoppingassistantservice
+
+# Manual trigger (if needed):
+#   GitHub Repo → Actions → DevSecOps CI → Run workflow
+
+
+===============================================================================
+  PHASE 2: KUBERNETES CLUSTER PREREQUISITES
+===============================================================================
+
+# --- 2.1: Create Namespace ---
+kubectl create namespace online-boutique
+kubectl create namespace online-boutique --dry-run=client -o yaml | kubectl apply -f -
+
+# --- 2.2: Create Docker Hub Pull Secret ---
+kubectl create secret docker-registry dockerhub-key \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=kihpn1711 \
+  --docker-password=<YOUR_DOCKERHUB_ACCESS_TOKEN> \
+  --namespace=online-boutique
+
+# --- 2.3: Create Gemini AI API Key Secret ---
+kubectl create secret generic gemini-api-key \
+  --from-literal=GEMINI_API_KEY="<YOUR_GEMINI_API_KEY>" \
+  --namespace=online-boutique
+
+# --- 2.4: Verify Secrets ---
+kubectl get secrets -n online-boutique
+
+
+===============================================================================
+  PHASE 3: INSTALL ARGOCD ON KUBERNETES
+===============================================================================
+
+# --- 3.1: Add Helm Repository ---
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+
+# --- 3.2: Copy ArgoCD values file to master node (from Windows) ---
+scp d:\DevOps\Projects\demo\microservices-demo\cicd\argocd-values.yaml \
+  devops@<MASTER_NODE_IP>:~/argocd/values.yaml
+
+# --- 3.3: Install ArgoCD via Helm ---
+helm install argocd argo/argo-cd \
+  --namespace argocd \
+  --create-namespace \
+  -f ~/argocd/values.yaml \
+  --wait --timeout 5m
+
+# --- 3.4: Retrieve Admin Password ---
+kubectl get secret argocd-initial-admin-secret -n argocd \
+  -o jsonpath="{.data.password}" | base64 -d && echo
+
+# --- 3.5: Verify ArgoCD Installation ---
+kubectl get pods -n argocd
+kubectl get svc -n argocd
+kubectl get ingress -n argocd
+
+# --- 3.6: Access ArgoCD UI ---
+#   URL   : http://argocd.kihpn.local
+#   Login : admin / <password from step 3.4>
+
+
+===============================================================================
+  PHASE 4: DEPLOY APPLICATION VIA ARGOCD
+===============================================================================
+
+# --- 4.1: Apply ArgoCD Application Manifest ---
+kubectl apply -f cicd/argocd-application.yaml
+
+# --- 4.2: Verify Application Status ---
+kubectl get applications -n argocd
+
+# --- 4.3: Watch Pods Starting (5-Group Startup Order) ---
+kubectl get pods -n online-boutique -w
+
+# Expected startup order:
+#   Group 1: redis-cart                    (Data Layer)
+#   Group 2: adservice, currencyservice,   (Independent Backends)
+#            emailservice, paymentservice,
+#            shippingservice, productcatalogservice
+#   Group 3: cartservice,                  (Dependent Backends)
+#            recommendationservice,
+#            checkoutservice
+#   Group 4: shoppingassistantservice,     (AI & Frontend)
+#            frontend
+#   Group 5: ingress                       (Traffic Entry)
+
+# --- 4.4: Verify All Pods Running ---
+kubectl get pods -n online-boutique
+# Expected: 12 pods, all showing 1/1 Running
+
+# --- 4.5: Verify Services ---
+kubectl get svc -n online-boutique
+
+# --- 4.6: Verify Ingress ---
+kubectl get ingress -n online-boutique
+
+
+===============================================================================
+  PHASE 5: EXTERNAL ACCESS CONFIGURATION (NGINX Reverse Proxy)
+===============================================================================
+
+# --- 5.1: Configure NGINX on Reverse Proxy Server ---
+# File: /etc/nginx/conf.d/online-boutique.conf
+
+# upstream boutique_cluster {
+#     server <NODE_1_IP>:30080;
+#     server <NODE_2_IP>:30080;
+#     server <NODE_3_IP>:30080;
+# }
+#
+# server {
+#     listen 80;
+#     server_name online-boutique.kihpn.local;
+#
+#     location / {
+#         proxy_pass http://boutique_cluster;
+#         proxy_redirect off;
+#         proxy_set_header Host $host;
+#         proxy_set_header X-Real-IP $remote_addr;
+#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#         proxy_set_header X-Forwarded-Proto $scheme;
+#     }
+# }
+
+# --- 5.2: Test and Reload NGINX ---
+sudo nginx -t
+sudo systemctl reload nginx
+
+# --- 5.3: DNS / Hosts Configuration ---
+# Add to /etc/hosts (Linux) or C:\Windows\System32\drivers\etc\hosts (Windows):
+#   <NGINX_SERVER_IP>  online-boutique.kihpn.local
+#   <NGINX_SERVER_IP>  argocd.kihpn.local
+
+
+===============================================================================
+  PHASE 6: VERIFICATION & SMOKE TESTS
+===============================================================================
+
+# --- 6.1: Application Web UI ---
+curl -I http://online-boutique.kihpn.local
+# Expected: HTTP/1.1 200 OK
+# Browser: http://online-boutique.kihpn.local → E-commerce storefront
+
+# --- 6.2: ArgoCD Sync Status ---
+kubectl get applications -n argocd
+# Expected: STATUS=Synced, HEALTH=Healthy
+
+# --- 6.3: Pod Logs (sample) ---
+kubectl logs deployment/frontend-online-boutique -n online-boutique --tail=20
+kubectl logs deployment/checkoutservice-online-boutique -n online-boutique --tail=20
+
+# --- 6.4: Service Connectivity Test ---
+kubectl run test-curl --rm -it --image=curlimages/curl \
+  --namespace=online-boutique -- \
+  curl -s http://frontend-online-boutique:80 | head -5
+
+
+===============================================================================
+  PHASE 7: UPGRADE & ROLLBACK PROCEDURES
+===============================================================================
+
+# --- 7.1: Standard Upgrade (GitOps) ---
+# 1. Edit values.yaml → change image tag
+# 2. git add . && git commit -m "chore: bump frontend to v3"
+# 3. git push origin main
+# 4. ArgoCD auto-syncs within 3 minutes
+
+# --- 7.2: Manual Sync (Immediate) ---
+kubectl patch application online-boutique -n argocd \
+  --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}'
+
+#   Or via ArgoCD CLI:
+argocd app sync online-boutique
+
+# --- 7.3: Emergency Rollback ---
+argocd app rollback online-boutique 1
+
+# --- 7.4: View Sync History ---
+argocd app history online-boutique
+
+
+===============================================================================
+  PHASE 8: CLEANUP (If Needed)
+===============================================================================
+
+# --- Delete Application ---
+kubectl delete application online-boutique -n argocd
+
+# --- Delete Namespace ---
+kubectl delete namespace online-boutique
+
+# --- Delete ArgoCD ---
+helm uninstall argocd -n argocd
+kubectl delete namespace argocd
+
+# --- Delete Secrets ---
+kubectl delete secret dockerhub-key -n online-boutique
+kubectl delete secret gemini-api-key -n online-boutique
+
+
+===============================================================================
+  END OF DEPLOYMENT STEPS
+===============================================================================
